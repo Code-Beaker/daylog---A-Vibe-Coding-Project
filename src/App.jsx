@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -230,18 +230,73 @@ const MoodCarousel = ({ entry, onChange, t, isDark }) => {
     selectedIdx === -1 ? Math.floor(MOOD_META.length / 2) : selectedIdx;
   const [idx, setIdx] = useState(activeIdx);
 
+  // Drag state
+  const [dragOffset, setDragOffset] = useState(0); // live px offset while dragging
+  const [isDragging, setIsDragging] = useState(false);
+  const dragStart = useRef(null); // { x, idx } at drag start
+  const STEP = 88; // px per emoji slot
+
   const select = (i) => {
-    setIdx(i);
-    onChange({ ...entry, mood: { ...entry.mood, emoji: MOOD_META[i].emoji } });
+    const clamped = Math.max(0, Math.min(MOOD_META.length - 1, i));
+    setIdx(clamped);
+    onChange({
+      ...entry,
+      mood: { ...entry.mood, emoji: MOOD_META[clamped].emoji },
+    });
   };
-  const prev = () => select(Math.max(0, idx - 1));
-  const next = () => select(Math.min(MOOD_META.length - 1, idx + 1));
+  const prev = () => select(idx - 1);
+  const next = () => select(idx + 1);
+
+  // ── Pointer helpers (unified mouse + touch) ────────────────────────────────
+  const getX = (e) => (e.touches ? e.touches[0].clientX : e.clientX);
+
+  const onDragStart = (e) => {
+    dragStart.current = { x: getX(e), idx };
+    setIsDragging(true);
+    setDragOffset(0);
+  };
+
+  const onDragMove = (e) => {
+    if (!dragStart.current) return;
+    const delta = getX(e) - dragStart.current.x;
+    setDragOffset(delta);
+
+    // Live preview: peek at which index we'd snap to
+    const steps = Math.round(-delta / STEP);
+    const previewIdx = Math.max(
+      0,
+      Math.min(MOOD_META.length - 1, dragStart.current.idx + steps),
+    );
+    if (previewIdx !== idx) setIdx(previewIdx);
+  };
+
+  const onDragEnd = () => {
+    if (!dragStart.current) return;
+    // Snap: already updated idx live, just clean up
+    const snappedIdx = idx;
+    dragStart.current = null;
+    setIsDragging(false);
+    setDragOffset(0);
+    select(snappedIdx);
+  };
 
   const active = MOOD_META[idx];
 
   return (
     <div
-      style={{ position: "relative", margin: "0 -24px", overflow: "hidden" }}
+      style={{
+        position: "relative",
+        margin: "0 -24px",
+        overflow: "hidden",
+        touchAction: "pan-y",
+      }}
+      onMouseDown={onDragStart}
+      onMouseMove={isDragging ? onDragMove : undefined}
+      onMouseUp={onDragEnd}
+      onMouseLeave={isDragging ? onDragEnd : undefined}
+      onTouchStart={onDragStart}
+      onTouchMove={onDragMove}
+      onTouchEnd={onDragEnd}
     >
       {/* Background glow */}
       <div
@@ -290,7 +345,6 @@ const MoodCarousel = ({ entry, onChange, t, isDark }) => {
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            gap: 0,
             width: "100%",
           }}
         >
@@ -299,51 +353,41 @@ const MoodCarousel = ({ entry, onChange, t, isDark }) => {
             const absOffset = Math.abs(offset);
             if (absOffset > 3) return null;
 
-            const scale =
-              absOffset === 0
-                ? 1
-                : absOffset === 1
-                  ? 0.62
-                  : absOffset === 2
-                    ? 0.42
-                    : 0.28;
-            const opacity =
-              absOffset === 0
-                ? 1
-                : absOffset === 1
-                  ? 0.75
-                  : absOffset === 2
-                    ? 0.45
-                    : 0.2;
-            const fontSize =
-              absOffset === 0
-                ? 72
-                : absOffset === 1
-                  ? 44
-                  : absOffset === 2
-                    ? 30
-                    : 22;
-            const translateX = offset * 88;
+            // While dragging, add a fractional offset for smoothness
+            const dragFrac = isDragging ? (dragOffset % STEP) / STEP : 0;
+            const visualOffset = offset - dragFrac;
+            const visualAbs = Math.abs(visualOffset);
+
+            const scale = Math.max(0.25, 1 - visualAbs * 0.2);
+            const opacity = Math.max(0.15, 1 - visualAbs * 0.28);
+            const fontSize = Math.max(18, 72 - visualAbs * 18);
+            const translateX = visualOffset * STEP;
 
             return (
               <div
                 key={m.emoji}
-                onClick={() => select(i)}
+                onClick={() => !isDragging && select(i)}
                 style={{
                   position: "absolute",
                   transform: `translateX(${translateX}px) scale(${scale})`,
                   opacity,
-                  transition:
-                    "transform 0.35s cubic-bezier(0.4,0,0.2,1), opacity 0.35s ease, font-size 0.35s ease",
-                  cursor: absOffset === 0 ? "default" : "pointer",
+                  transition: isDragging
+                    ? "opacity 0.1s ease"
+                    : "transform 0.38s cubic-bezier(0.2,0,0,1), opacity 0.35s ease",
+                  cursor: isDragging
+                    ? "grabbing"
+                    : absOffset === 0
+                      ? "grab"
+                      : "pointer",
                   fontSize,
                   lineHeight: 1,
                   userSelect: "none",
+                  WebkitUserSelect: "none",
                   filter:
                     absOffset === 0
                       ? `drop-shadow(0 0 18px ${active.glow})`
                       : "none",
-                  zIndex: 10 - absOffset,
+                  zIndex: 10 - Math.round(absOffset),
                 }}
               >
                 {m.emoji}
