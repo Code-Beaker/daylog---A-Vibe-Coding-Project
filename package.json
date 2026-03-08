@@ -1,0 +1,26 @@
+{
+  "name": "daylog-app",
+  "version": "1.0.0",
+  "description": "",
+  "homepage": "https://github.com/Code-Beaker/daylog---A-Vibe-Coding-Project#readme",
+  "bugs": {
+    "url": "https://github.com/Code-Beaker/daylog---A-Vibe-Coding-Project/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Code-Beaker/daylog---A-Vibe-Coding-Project.git"
+  },
+  "license": "ISC",
+  "author": "",
+  "type": "commonjs",
+  "source": "src/index.html",
+  "scripts": {
+    "dev": "parcel src/index.html",
+    "build": "parcel build src/index.html"
+  },
+  "dependencies": {
+    "parcel": "^2.16.4",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4"
+  }
+}
